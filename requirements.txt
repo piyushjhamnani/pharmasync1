@@ -1,0 +1,12 @@
+streamlit
+pandas
+sentence-transformers
+torch
+opencv-python
+mediapipe
+deepface
+SpeechRecognition
+pyaudio
+pyttsx3
+tf-keras
+numpy
