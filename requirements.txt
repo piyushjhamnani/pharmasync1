@@ -3,7 +3,7 @@ pandas
 sentence-transformers
 torch
 opencv-python-headless
-mediapipe
+
 deepface
 SpeechRecognition
 pyaudio
