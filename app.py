@@ -441,12 +441,6 @@ def process_answer(question, answer_text):
         # Reset and move to next question
         st.session_state.temp_ans = ""
         st.session_state.current_idx += 1
-        
-        if st.session_state.current_idx >= len(st.session_state.question_queue):
-            # Stop camera before finishing
-            stop_continuous_monitoring()
-            st.session_state.app_state = 'report'
-        
         st.rerun()
     
     except Exception as e:
@@ -539,8 +533,8 @@ elif st.session_state.app_state == 'interview':
     qs = st.session_state.question_queue
     idx = st.session_state.current_idx
     
-    # Check if interview is complete
-    if idx >= len(qs):
+    # Check if interview is complete or face warnings exceeded
+    if idx >= len(qs) or st.session_state.face_warnings >= 3:
         stop_continuous_monitoring()
         st.session_state.app_state = 'report'
         st.rerun()
@@ -742,39 +736,70 @@ elif st.session_state.app_state == 'report':
             st.metric("Face Visibility", f"{avg_face_rate:.1f}%")
         
         # Face monitoring summary
+        # Actions
         st.divider()
-        st.markdown("### 👤 Face Monitoring Summary")
-        
-        if avg_face_rate >= 80:
-            st.success("✅ Excellent face visibility throughout the interview")
-        elif avg_face_rate >= 60:
-            st.info("👍 Good face visibility")
-        elif avg_face_rate >= 40:
-            st.warning("⚠️ Moderate face visibility")
-        else:
-            st.error("❌ Low face visibility - try to stay centered in frame")
-        
-        if total_warnings > 0:
-            st.warning(f"⚠️ Received {total_warnings} face visibility warnings")
-        
-        # Detailed results
-        st.divider()
-        st.markdown("### 📋 Question-wise Results")
-        
-        for i, res in enumerate(results):
-            score = res.get('score', 0)
-            
-            with st.expander(f"Q{i+1}: {res['question'][:60]}... (Score: {score}%)"):
-                st.markdown(f"**Question:** {res['question']}")
-                st.markdown(f"**Your Answer:** {res['answer']}")
-                
-                # Face stats
-                face_rate = res.get('face_detection_rate', 0)
-                st.markdown(f"**Face Visibility:** {face_rate:.0f}%")
-                
-                warnings = res.get('face_warnings', 0)
-                if warnings > 0:
-                    st.warning(f"Face warnings: {warnings}")
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            if st.button("💾 Export Results (CSV)", use_container_width=True):
+                export_data = []
+                for i, res in enumerate(results):
+                    export_data.append({
+                        "question_number": i + 1,
+                        "question": res['question'],
+                        "answer": res['answer'],
+                        "score": res['score'],
+                        "feedback": res['feedback'],
+                        "face_visibility": res.get('face_detection_rate', 0),
+                        "face_warnings": res.get('face_warnings', 0)
+                    })
+                df = pd.DataFrame(export_data)
+                csv = df.to_csv(index=False)
+                st.download_button(
+                    label="Download CSV",
+                    data=csv,
+                    file_name=f"interview_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+
+        with col2:
+            if st.button("📄 Export PDF Report", use_container_width=True):
+                from fpdf import FPDF
+                pdf = FPDF()
+                pdf.add_page()
+                pdf.set_font("Arial", size=12)
+                pdf.cell(200, 10, txt="Interview Report", ln=True, align="C")
+                pdf.ln(10)
+                pdf.cell(200, 10, txt=f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True, align="L")
+                pdf.ln(5)
+                pdf.cell(200, 10, txt=f"Overall Score: {avg_score:.1f}%", ln=True, align="L")
+                pdf.cell(200, 10, txt=f"Face Visibility: {avg_face_rate:.1f}%", ln=True, align="L")
+                pdf.cell(200, 10, txt=f"Total Face Warnings: {total_warnings}", ln=True, align="L")
+                pdf.ln(10)
+                pdf.set_font("Arial", size=11)
+                for i, res in enumerate(results):
+                    pdf.multi_cell(0, 8, txt=f"Q{i+1}: {res['question']}", align="L")
+                    pdf.multi_cell(0, 8, txt=f"Answer: {res['answer']}", align="L")
+                    pdf.cell(0, 8, txt=f"Score: {res['score']}%", ln=True)
+                    pdf.cell(0, 8, txt=f"Face Visibility: {res.get('face_detection_rate', 0):.0f}%", ln=True)
+                    pdf.cell(0, 8, txt=f"Face Warnings: {res.get('face_warnings', 0)}", ln=True)
+                    pdf.multi_cell(0, 8, txt=f"Feedback: {res['feedback']}", align="L")
+                    pdf.ln(4)
+                pdf_output = pdf.output(dest='S').encode('latin1')
+                st.download_button(
+                    label="Download PDF",
+                    data=pdf_output,
+                    file_name=f"interview_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+
+        with col3:
+            if st.button("🔄 New Interview", type="primary", use_container_width=True, key="new_interview_col3"):
+                st.session_state.clear()
+                initialize_session_state()
+                st.rerun()
                 
                 # Feedback
                 feedback = res.get('feedback', '')
@@ -815,7 +840,7 @@ elif st.session_state.app_state == 'report':
                 )
         
         with col2:
-            if st.button("🔄 New Interview", type="primary", use_container_width=True):
+            if st.button("🔄 New Interview", type="primary", use_container_width=True, key="new_interview_bottom"):
                 st.session_state.clear()
                 initialize_session_state()
                 st.rerun()

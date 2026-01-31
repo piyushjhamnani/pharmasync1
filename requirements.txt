@@ -2,7 +2,7 @@ streamlit
 pandas
 sentence-transformers
 torch
-opencv-python
+opencv-python-headless
 mediapipe
 deepface
 SpeechRecognition
